@@ -1,13 +1,13 @@
 var fs = require('fs');
 var babar = require('babar');
-var pg = require('pg');
+var Pool = require('pg').Pool;
 var randomString = require('random-strings');
 var LivePg = require('pg-live-select');
 
 var install = require('./lib/install');
 
 // Connect to this database
-var CONN_STR = 'postgres://meteor:meteor@127.0.0.1/meteor_test';
+var CONN_STR = 'postgres://postgres:pass@127.0.0.1/postgres';
 // Generate this much sample data (see lib/install.js)
 var GEN_SETTINGS = [
   200, // class count
@@ -24,11 +24,16 @@ var ASSIGN_COUNT = GEN_SETTINGS[0] * GEN_SETTINGS[1];
 var STUDENT_COUNT = Math.ceil(GEN_SETTINGS[0] / GEN_SETTINGS[3]) * GEN_SETTINGS[2];
 var SCORES_COUNT = ASSIGN_COUNT * GEN_SETTINGS[2];
 
+var pool = new Pool({
+  connectionString: CONN_STR,
+});
 
 var runState = {
   eventCount: 0,
   scoresCount: SCORES_COUNT
 };
+
+var timeouts = [];
 
 var insertTimes = {};
 
@@ -81,6 +86,10 @@ var memInterval = setInterval(function() {
 
 // Save and display output on Ctrl+C
 process.on('SIGINT', function() {
+  while (timeouts.length) {
+    clearTimeout(timeouts.shift());
+  }
+
   if(process.argv.length > 2) {
     try {
       fs.writeFileSync(process.argv[2], JSON.stringify(memSnapshots));
@@ -96,12 +105,14 @@ process.on('SIGINT', function() {
   }
 
   liveDb.cleanup(process.exit);
+
+  pool.end();
 });
 
 var liveDb = new LivePg(CONN_STR, 'my_channel');
 
 // Install sample dataset and begin test queries
-install(CONN_STR, GEN_SETTINGS, function(error) {
+install(pool, GEN_SETTINGS, function(error) {
   if(error) throw error;
 
   console.log('Data installed! Beginning test queries...');
@@ -126,8 +137,8 @@ install(CONN_STR, GEN_SETTINGS, function(error) {
   }
 
   QUERIES.forEach(function(description) {
-    setInterval(function() {
-      pg.connect(CONN_STR, function(error, client, done) {
+    timeouts.push(setInterval(function() {
+      pool.connect(function(error, client, done) {
         if(error) throw error;
 
         client.query(description.query, description.params(),
@@ -137,7 +148,7 @@ install(CONN_STR, GEN_SETTINGS, function(error) {
           }
         );
       });
-    }, 1000 / description.execPerSecond);
+    }, 1000 / description.execPerSecond));
   });
 });
 
