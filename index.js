@@ -201,7 +201,8 @@ install(pool, GEN_SETTINGS, function(error) {
         handle.on('insert', function(row) {
           runState.eventCount++;
 
-          if (!ready) {
+          // An update about initial scores.
+          if (row.score_id <= SCORES_COUNT) {
             return;
           }
 
@@ -214,9 +215,6 @@ install(pool, GEN_SETTINGS, function(error) {
             measurements.responseTimes.push([ elapsed, now - start ]);
             delete insertTimes[row.score_id];
           }
-        });
-        handle.on('ready', function() {
-          ready = true;
         });
         handle.start();
       });
