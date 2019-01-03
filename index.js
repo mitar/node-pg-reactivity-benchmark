@@ -128,7 +128,10 @@ function interruptHandler() {
   pool.end();
 
   if (PACKAGE === 'reactive-postgres-id' || PACKAGE === 'reactive-postgres-changed' || PACKAGE === 'reactive-postgres-full') {
-    reactiveQueries.stop().then(process.exit);
+    reactiveQueries.stop().then(process.exit).catch(function(error) {
+      console.error("Error stopping manager.", error);
+      process.exit(1);
+    });
   }
   else if (PACKAGE === 'pg-live-select') {
     reactiveQueries.cleanup(process.exit);
@@ -145,7 +148,10 @@ var reactiveQueries;
 if (PACKAGE === 'reactive-postgres-id' || PACKAGE === 'reactive-postgres-changed' || PACKAGE === 'reactive-postgres-full') {
   var Manager = require('reactive-postgres').Manager;
   reactiveQueries = new Manager({connectionConfig: {connectionString: CONN_STR}});
-  reactiveQueries.start();
+  reactiveQueries.start().catch(function(error) {
+    console.error("Error starting manager.", error);
+    process.exit(1);
+  });
 }
 else if (PACKAGE === 'pg-live-select') {
   var LivePg = require('pg-live-select');
@@ -219,7 +225,13 @@ install(pool, GEN_SETTINGS, function(error) {
             delete insertTimes[row.score_id];
           }
         });
-        handle.start();
+        handle.start().catch(function(error) {
+          console.error("Error starting a handle.", error);
+          process.exit(1);
+        });
+      }).catch(function(error) {
+        console.error("Error creating a handle.", error);
+        process.exit(1);
       });
     }
     else if (PACKAGE === 'pg-live-select') {
