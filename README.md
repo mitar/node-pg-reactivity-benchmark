@@ -1,9 +1,9 @@
-# Benchmark of reactive quries for PostgreSQL
+# Benchmark of reactive queries for PostgreSQL
 
 This test provides a structure for running queries repeatedly while measuring the
 application's memory usage as well as measuring response times on an array of
 reactive queries using different packages supporting them:
- * `reactive-postgres`
+ * [`reactive-postgres`](https://github.com/tozd/node-reactive-postgres)
  * [`pg-live-select`](https://github.com/numtel/pg-live-select)
  * [`pg-live-query`](https://github.com/nothingisdead/pg-live-query)
 
