@@ -61,15 +61,20 @@ var QUERIES = [
   }
 ];
 
+var ALL_QUERIES_PER_SECOND = 0;
+for (var i = 0; i < QUERIES.length; i++) {
+  ALL_QUERIES_PER_SECOND += QUERIES.execPerSecond;
+}
+
 var startTime;
-var memSnapshots = { heapTotal: [], heapUsed: [], responseTimes: [] };
+var measurements = { heapTotal: [], heapUsed: [], responseTimes: [] };
 
 function recordMemory() {
   var memUsage = process.memoryUsage();
   var elapsed = (Date.now() - startTime) / 1000;
 
-  memSnapshots.heapTotal.push([ elapsed, memUsage.heapTotal / 1024 / 1024 ]);
-  memSnapshots.heapUsed.push([ elapsed, memUsage.heapUsed / 1024 / 1024 ]);
+  measurements.heapTotal.push([ elapsed, memUsage.heapTotal / 1024 / 1024 ]);
+  measurements.heapUsed.push([ elapsed, memUsage.heapUsed / 1024 / 1024 ]);
 
   process.stdout.write('\r ' + Math.floor(elapsed) + ' seconds elapsed...');
 }
@@ -82,22 +87,22 @@ process.on('SIGINT', function() {
 
   if(process.argv.length === 4) {
     try {
-      fs.writeFileSync(process.argv[3], JSON.stringify(memSnapshots));
+      fs.writeFileSync(process.argv[3], JSON.stringify(measurements, null, 2));
     } catch(err) {
       console.error('Unable to save output!');
     }
   }
 
   console.log('\n Final Runtime Status:', runState);
-  // This is probabilistic, only a fraction of all changes should happen to reactive queries
-  console.log(' Approximate Changes Made To Reactive Queries:', runState.changesCount / (GEN_SETTINGS[0] / REACTIVE_QUERIES_COUNT));
 
-  console.log(babar(memSnapshots.heapTotal, { caption: "heapTotal (MB)" }));
-  console.log(babar(memSnapshots.heapUsed, { caption: "heapUsed (MB)" }));
-  console.log(babar(memSnapshots.responseTimes, { caption: "responseTimes (ms)" }));
+  console.log(babar(measurements.heapTotal, { caption: "heapTotal (MB)" }));
+  console.log(babar(measurements.heapUsed, { caption: "heapUsed (MB)" }));
+  console.log(babar(measurements.responseTimes, { caption: "responseTimes (ms)" }));
 
-  if (PACKAGE === 'reactive-postgres') {
+  pool.end();
 
+  if (PACKAGE === 'reactive-postgres-id' || PACKAGE === 'reactive-postgres-changed' || PACKAGE === 'reactive-postgres-full') {
+    reactiveQueries.stop().then(process.exit);
   }
   else if (PACKAGE === 'pg-live-select') {
     reactiveQueries.cleanup(process.exit);
@@ -105,13 +110,13 @@ process.on('SIGINT', function() {
   else if (PACKAGE === 'pg-live-query') {
 
   }
-
-  pool.end();
 });
 
 var reactiveQueries;
-if (PACKAGE === 'reactive-postgres') {
-
+if (PACKAGE === 'reactive-postgres-id' || PACKAGE === 'reactive-postgres-changed' || PACKAGE === 'reactive-postgres-full') {
+  var Manager = require('reactive-postgres').Manager;
+  reactiveQueries = new Manager({connectionConfig: {connectionString: CONN_STR}});
+  reactiveQueries.start();
 }
 else if (PACKAGE === 'pg-live-select') {
   var LivePg = require('pg-live-select');
@@ -140,23 +145,71 @@ install(pool, GEN_SETTINGS, function(error) {
 
   var reactiveQueryText = fs.readFileSync('reactivequery.sql').toString();
   for(var classId = 1; classId <= REACTIVE_QUERIES_COUNT; classId++) {
-    if (PACKAGE === 'reactive-postgres') {
+    if (PACKAGE === 'reactive-postgres-id' || PACKAGE === 'reactive-postgres-changed' || PACKAGE === 'reactive-postgres-full') {
+      var mode;
+      if (PACKAGE === 'reactive-postgres-id') {
+        mode = 'id';
+      }
+      else if (PACKAGE === 'reactive-postgres-changed') {
+        mode = 'changed';
+      }
+      else if (PACKAGE === 'reactive-postgres-full') {
+        mode = 'full';
+      }
+      reactiveQueries.query(
+        reactiveQueryText.replace('$1', "'" + classId + "'"),
+        {
+          uniqueColumn: 'score_id',
+          mode: mode,
+        },
+      ).then(function(handle) {
+        var ready = false;
+        handle.on('insert', function(row) {
+          runState.eventCount++;
 
+          var unconfirmed = Object.keys(insertTimes).length;
+          if (unconfirmed > 10 * ALL_QUERIES_PER_SECOND) {
+            console.log('Unconfirmed queries are growing', unconfirmed);
+          }
+
+          if (!ready) {
+            return;
+          }
+
+          var start = insertTimes[row.score_id];
+          if(typeof start === 'undefined') {
+            console.log('Unexpected update ' + row.score_id);
+          } else {
+            var elapsed = (Date.now() - startTime) / 1000;
+            measurements.responseTimes.push([ elapsed, Date.now() - start ]);
+            delete insertTimes[row.score_id];
+          }
+        });
+        handle.on('ready', function() {
+          ready = true;
+        });
+        handle.start();
+      });
     }
     else if (PACKAGE === 'pg-live-select') {
       reactiveQueries.select(reactiveQueryText, [ classId ]).on('update', function(diff, data) {
+        runState.eventCount++;
+
+        var unconfirmed = Object.keys(insertTimes).length;
+        if (unconfirmed > 10 * ALL_QUERIES_PER_SECOND) {
+          console.log('Unconfirmed queries are growing', unconfirmed);
+        }
+
         if(diff && diff.added && diff.added.length === 1) {
           var start = insertTimes[diff.added[0].score_id];
-          if(typeof start === undefined) {
+          if(typeof start === 'undefined') {
             console.log('Unexpected update ' + diff.added[0].score_id);
           } else {
             var elapsed = (Date.now() - startTime) / 1000;
-            memSnapshots.responseTimes.push([ elapsed, Date.now() - start ]);
+            measurements.responseTimes.push([ elapsed, Date.now() - start ]);
             delete insertTimes[diff.added[0].score_id];
           }
         }
-
-        runState.eventCount++;
       });
     }
     else if (PACKAGE === 'pg-live-query') {
