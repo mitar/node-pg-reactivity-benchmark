@@ -95,12 +95,14 @@ function recordMemory() {
 
 var interrupted = false;
 
-// Save and display output on Ctrl+C
-process.on('SIGINT', function() {
+function interruptHandler() {
   if (interrupted) {
     return;
   }
   interrupted = true;
+
+  // So that double Ctrl+C kills it.
+  process.off('SIGINT', interruptHandler);
 
   while (timeouts.length) {
     clearTimeout(timeouts.shift());
@@ -131,7 +133,10 @@ process.on('SIGINT', function() {
   else if (PACKAGE === 'pg-live-query') {
 
   }
-});
+}
+
+// Save and display output on Ctrl+C
+process.on('SIGINT', interruptHandler);
 
 var reactiveQueries;
 if (PACKAGE === 'reactive-postgres-id' || PACKAGE === 'reactive-postgres-changed' || PACKAGE === 'reactive-postgres-full') {
