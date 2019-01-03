@@ -1,10 +1,16 @@
-## node-postgres simple load test
+# Benchmark of reactive quries for PostgreSQL
 
 This test provides a structure for running queries repeatedly while measuring the
-application's memory usage as well as measuring response times on an array of live
-queries (provided by [`pg-live-select` package](https://github.com/numtel/pg-live-select)).
+application's memory usage as well as measuring response times on an array of
+reactive queries using different packages supporting them:
+ * `reactive-postgres`
+ * [`pg-live-select`](https://github.com/numtel/pg-live-select)
+ * [`pg-live-query`](https://github.com/nothingisdead/pg-live-query)
 
-A reading of `index.js` is recommended to understand the operations performed. The following commands can be used to get the application running on your machine:
+A reading of [`index.js`](./index.js) (variable `QUERIES`) is recommended to understand the operations
+performed. See [`livequery.sql`](./livequery.sql) for a reactive query used.
+
+The following commands can be used to get the application running on your machine:
 
 ```bash
 $ npm install
@@ -16,10 +22,10 @@ $ vim index.js
 $ node index.js out.json
 ```
 
-Press `ctrl+c` to exit and display memory usage graphs.
+Run it for a minute or more and press `ctrl+c` to exit and display benchmark graphs.
 
-If an output file is specified, it may be viewed using `index.html`.
+If an output file is specified, it may be viewed using [`index.html`](./index.html).
 
-### License
+## License
 
 MIT
