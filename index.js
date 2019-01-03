@@ -40,6 +40,7 @@ var runState = {
 
 var timeouts = [];
 
+var unconfirmedInserts = {};
 var insertTimes = {};
 
 // Description of queries to perform
@@ -52,12 +53,13 @@ var QUERIES = [
       runState.changesCount++;
       var assignmentId = Math.ceil(Math.random() * ASSIGN_COUNT);
       var classId = ((assignmentId - 1) % GEN_SETTINGS[0]) + 1;
+      var scoreId = runState.changesCount + SCORES_COUNT;
       // Only for these we have reactive queries.
       if (1 <= classId && classId <= REACTIVE_QUERIES_COUNT) {
-        insertTimes[runState.changesCount + SCORES_COUNT] = Date.now();
+        insertTimes[scoreId] = Date.now();
       }
       return [
-        runState.changesCount + SCORES_COUNT,
+        scoreId,
         assignmentId,
         Math.ceil(Math.random() * STUDENT_COUNT),
         Math.ceil(Math.random() * 100)
@@ -82,12 +84,13 @@ function recordMemory() {
   measurements.heapUsed.push([ elapsed, memUsage.heapUsed / 1024 / 1024 ]);
 
   var now = Date.now();
+  var inserts = Object.values(unconfirmedInserts).length;
   var unconfirmed = Object.values(insertTimes).length;
   var longUnconfirmed = Object.values(insertTimes).filter(function(timestamp) {
     return timestamp < now - 5 * 1000;
   }).length;
 
-  process.stdout.write('\r ' + Math.floor(elapsed) + ' seconds elapsed... (' + unconfirmed + ' unconfirmed changes, ' + longUnconfirmed + ' unconfirmed > 5s)');
+  process.stdout.write('\r ' + Math.floor(elapsed) + ' seconds elapsed... (' + inserts + ' unconfirmed inserts, ' + unconfirmed + ' unconfirmed changes, ' + longUnconfirmed + ' unconfirmed changes > 5s)');
 }
 
 var interrupted = false;
@@ -238,9 +241,14 @@ install(pool, GEN_SETTINGS, function(error) {
       pool.connect(function(error, client, done) {
         if(error) throw error;
 
-        client.query(description.query, description.params(),
+        var params = description.params();
+        if (typeof insertTimes[params[0]] !== 'undefined') {
+          unconfirmedInserts[params[0]] = true;
+        }
+        client.query(description.query, params,
           function(error, result) {
             done();
+            delete unconfirmedInserts[params[0]];
             if(error) throw error;
           }
         );
