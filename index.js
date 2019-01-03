@@ -1,7 +1,6 @@
 var fs = require('fs');
 var babar = require('babar');
 var Pool = require('pg').Pool;
-var randomString = require('random-strings');
 var LivePg = require('pg-live-select');
 
 var install = require('./lib/install');
@@ -39,19 +38,6 @@ var insertTimes = {};
 
 // Description of queries to perform
 var QUERIES = [
-//   {
-//     execPerSecond: 800, // Number of times to execute query per second
-//     query: fs.readFileSync('testquery.sql').toString(),
-//     params: function() {
-//       runState.eventCount++
-//       var classId = (runState.eventCount % GEN_SETTINGS[0]) + 1;
-//       var oldHashes = [];
-//       for(var i = 0; i < 100; i++) {
-//         oldHashes.push('\'' + randomString.alphaLower(32) + '\'');
-//       }
-//       return [ classId, oldHashes ];
-//     }
-//   },
   {
     execPerSecond: 100,
     query: 'INSERT INTO scores (id, assignment_id, student_id, score)' +
@@ -76,10 +62,8 @@ var memInterval = setInterval(function() {
   var memUsage = process.memoryUsage();
   var elapsed = (Date.now() - startTime) / 1000;
 
-  for(var i in memSnapshots) {
-    if(i === 'responseTimes') continue;
-    memSnapshots[i].push([ elapsed, memUsage[i] / 1024 / 1024 ]);
-  }
+  memSnapshots.heapTotal.push([ elapsed, memUsage.heapTotal / 1024 / 1024 ]);
+  memSnapshots.heapUsed.push([ elapsed, memUsage.heapUsed / 1024 / 1024 ]);
 
   process.stdout.write('\r ' + Math.floor(elapsed) + ' seconds elapsed...');
 }, 1000);
@@ -100,9 +84,9 @@ process.on('SIGINT', function() {
 
   console.log('\n Final Runtime Status:', runState);
 
-  for(var i in memSnapshots) {
-    console.log(babar(memSnapshots[i], { caption: i }));
-  }
+  console.log(babar(memSnapshots.heapTotal, { caption: "heapTotal (MB)" }));
+  console.log(babar(memSnapshots.heapUsed, { caption: "heapUsed (MB)" }));
+  console.log(babar(memSnapshots.responseTimes, { caption: "responseTimes (ms)" }));
 
   liveDb.cleanup(process.exit);
 

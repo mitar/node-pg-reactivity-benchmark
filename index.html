@@ -15,12 +15,12 @@
 
       google.load('visualization', '1', {'packages':['annotationchart']});
 
-      function drawChart(element, dataSet) {
+      function drawChart(element, dataSet, label) {
         var data = new google.visualization.DataTable();
         data.addColumn('date', 'Date');
 
-        dataSet.forEach(function(key) {
-          data.addColumn('number', key);
+        dataSet.forEach(function(key, i) {
+          data.addColumn('number', label[i]);
           data.addColumn('string', key + ' title');
           data.addColumn('string', key + ' text');
         });
@@ -32,7 +32,7 @@
 
         data.addRows(firstSet.map(function(evt, index) {
           var row = [
-            new Date(2314, 0, 0, 0, 0, evt[0]), evt[1], undefined, undefined ];
+            new Date(2000, 0, 0, 0, 0, evt[0]), evt[1], undefined, undefined ];
 
           if(dataSet.length > 1) {
             for(var i = 1; i < dataSet.length; i++) {
@@ -57,9 +57,9 @@
         if(filename === '') return;
 
         drawChart(document.getElementById('memory_chart'),
-          [ 'heapTotal', 'heapUsed' ]);
+          [ 'heapTotal', 'heapUsed' ], [ 'heapTotal (MB)', 'heapUsed (MB)' ]);
         drawChart(document.getElementById('response_times_chart'),
-          [ 'responseTimes' ]);
+          [ 'responseTimes' ], [ 'responseTimes (ms)' ]);
       });
     </script>
     <style>
