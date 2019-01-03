@@ -21,7 +21,13 @@ $ vim index.js
 $ node index.js reactive-postgres out.json
 ```
 
-The first argument tell which package to use.
+The first argument tell which package/configuration to use. Available options are:
+* `reactive-postgres-id`: in `id` mode
+* `reactive-postgres-changed`: in `changed` mode
+* `reactive-postgres-full`: in `full` mode
+* `pg-live-select`
+* `pg-live-query-watch`: using `watch`
+* `pg-live-query-query`: using `query`
 
 Run it for a minute or more and press `ctrl+c` to exit and display benchmark graphs.
 
