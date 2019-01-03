@@ -223,8 +223,6 @@ install(pool, GEN_SETTINGS, function(error) {
       });
     }
     else if (PACKAGE === 'pg-live-select') {
-      var first = true;
-
       reactiveQueries.select(reactiveQueryText, [ classId ]).on('update', function(diff, data) {
         runState.eventCount++;
 
