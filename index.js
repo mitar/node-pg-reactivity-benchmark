@@ -161,6 +161,14 @@ console.log("Installing data...");
 install(pool, GEN_SETTINGS, function(error) {
   if(error) throw error;
 
+  if (global.gc) {
+    global.gc();
+  }
+  else {
+    console.error("Cannot run garbage collection. Use --expose-gc when launching node to enable it.");
+    process.exit(1);
+  }
+
   console.log('Data installed! Beginning test queries...');
 
   startTime = Date.now();

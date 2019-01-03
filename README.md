@@ -18,7 +18,7 @@ $ npm install
 $ vim index.js
 
 # Start the application with the following command: (Output file is optional)
-$ node index.js reactive-postgres out.json
+$ node --expose-gc index.js reactive-postgres out.json
 ```
 
 The first argument tell which package/configuration to use. Available options are:
