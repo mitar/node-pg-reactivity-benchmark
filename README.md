@@ -27,6 +27,12 @@ Run it for a minute or more and press `ctrl+c` to exit and display benchmark gra
 
 If an output file is specified, it may be viewed using [`index.html`](./index.html).
 
+The following measurements are done:
+* [Used node heap](https://nodejs.org/api/process.html#process_process_memoryusage) every second.
+* [Total node heap](https://nodejs.org/api/process.html#process_process_memoryusage) every second.
+* Time between a data modification query being issued to the database, and when a reactive
+  query emitted a corresponding event.
+
 ## License
 
 MIT
