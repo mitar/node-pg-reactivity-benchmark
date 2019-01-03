@@ -50,10 +50,15 @@ var QUERIES = [
       ' VALUES ($1, $2, $3, $4)',
     params: function() {
       runState.changesCount++;
-      insertTimes[runState.changesCount + SCORES_COUNT] = Date.now();
+      var assignmentId = Math.ceil(Math.random() * ASSIGN_COUNT);
+      var classId = ((assignmentId - 1) % GEN_SETTINGS[0]) + 1;
+      // Only for these we have reactive queries.
+      if (1 <= classId && classId <= REACTIVE_QUERIES_COUNT) {
+        insertTimes[runState.changesCount + SCORES_COUNT] = Date.now();
+      }
       return [
         runState.changesCount + SCORES_COUNT,
-        Math.ceil(Math.random() * ASSIGN_COUNT),
+        assignmentId,
         Math.ceil(Math.random() * STUDENT_COUNT),
         Math.ceil(Math.random() * 100)
       ];
