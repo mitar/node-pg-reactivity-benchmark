@@ -81,11 +81,24 @@ function recordMemory() {
   measurements.heapTotal.push([ elapsed, memUsage.heapTotal / 1024 / 1024 ]);
   measurements.heapUsed.push([ elapsed, memUsage.heapUsed / 1024 / 1024 ]);
 
-  process.stdout.write('\r ' + Math.floor(elapsed) + ' seconds elapsed... (' + Object.keys(insertTimes).length + ' unconfirmed changes)');
+  var now = Date.now();
+  var unconfirmed = Object.values(insertTimes).length;
+  var longUnconfirmed = Object.values(insertTimes).filter(function(timestamp) {
+    return timestamp < now - 5 * 1000;
+  }).length;
+
+  process.stdout.write('\r ' + Math.floor(elapsed) + ' seconds elapsed... (' + unconfirmed + ' unconfirmed changes, ' + longUnconfirmed + ' unconfirmed > 5s)');
 }
+
+var interrupted = false;
 
 // Save and display output on Ctrl+C
 process.on('SIGINT', function() {
+  if (interrupted) {
+    return;
+  }
+  interrupted = true;
+
   while (timeouts.length) {
     clearTimeout(timeouts.shift());
   }
@@ -180,8 +193,9 @@ install(pool, GEN_SETTINGS, function(error) {
           if(typeof start === 'undefined') {
             console.log('Unexpected update ' + row.score_id);
           } else {
-            var elapsed = (Date.now() - startTime) / 1000;
-            measurements.responseTimes.push([ elapsed, Date.now() - start ]);
+            var now = Date.now();
+            var elapsed = (now - startTime) / 1000;
+            measurements.responseTimes.push([ elapsed, now - start ]);
             delete insertTimes[row.score_id];
           }
         });
@@ -192,17 +206,24 @@ install(pool, GEN_SETTINGS, function(error) {
       });
     }
     else if (PACKAGE === 'pg-live-select') {
+      var first = true;
+
       reactiveQueries.select(reactiveQueryText, [ classId ]).on('update', function(diff, data) {
         runState.eventCount++;
 
-        if(diff && diff.added && diff.added.length === 1) {
-          var start = insertTimes[diff.added[0].score_id];
+        for (var i = 0; i < diff.added.length; i++) {
+          // An update about initial scores.
+          if (diff.added[i].score_id <= SCORES_COUNT) {
+            continue;
+          }
+          var start = insertTimes[diff.added[i].score_id];
           if(typeof start === 'undefined') {
-            console.log('Unexpected update ' + diff.added[0].score_id);
+            console.log('Unexpected update ' + diff.added[i].score_id);
           } else {
-            var elapsed = (Date.now() - startTime) / 1000;
-            measurements.responseTimes.push([ elapsed, Date.now() - start ]);
-            delete insertTimes[diff.added[0].score_id];
+            var now = Date.now();
+            var elapsed = (now - startTime) / 1000;
+            measurements.responseTimes.push([ elapsed, now - start ]);
+            delete insertTimes[diff.added[i].score_id];
           }
         }
       });
