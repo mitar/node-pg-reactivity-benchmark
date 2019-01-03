@@ -1,7 +1,6 @@
 var fs = require('fs');
 var babar = require('babar');
 var Pool = require('pg').Pool;
-var LivePg = require('pg-live-select');
 
 var install = require('./lib/install');
 
@@ -15,13 +14,23 @@ var GEN_SETTINGS = [
   6  // classes per student
 ];
 
-// Instantiate this many liveselect objects
-var LIVE_SELECT_COUNT = 50;
+// Instantiate this many reactive queries
+var REACTIVE_QUERIES_COUNT = 50;
 
 // Relative to generated data set
 var ASSIGN_COUNT = GEN_SETTINGS[0] * GEN_SETTINGS[1];
 var STUDENT_COUNT = Math.ceil(GEN_SETTINGS[0] / GEN_SETTINGS[3]) * GEN_SETTINGS[2];
 var SCORES_COUNT = ASSIGN_COUNT * GEN_SETTINGS[2];
+
+if (REACTIVE_QUERIES_COUNT > GEN_SETTINGS[0]) {
+  throw new Error("Too many reactive queries for generated data.");
+}
+
+if (process.argv.length < 3 || process.argv.length > 4) {
+  throw Error("Invalid number of arguments.")
+}
+
+var PACKAGE = process.argv[2];
 
 var pool = new Pool({
   connectionString: CONN_STR,
@@ -54,11 +63,10 @@ var QUERIES = [
   }
 ];
 
-// Record memory usage every second
 var startTime = Date.now();
 var memSnapshots = { heapTotal: [], heapUsed: [], responseTimes: [] };
 
-var memInterval = setInterval(function() {
+function recordMemory() {
   var memUsage = process.memoryUsage();
   var elapsed = (Date.now() - startTime) / 1000;
 
@@ -66,7 +74,7 @@ var memInterval = setInterval(function() {
   memSnapshots.heapUsed.push([ elapsed, memUsage.heapUsed / 1024 / 1024 ]);
 
   process.stdout.write('\r ' + Math.floor(elapsed) + ' seconds elapsed...');
-}, 1000);
+}
 
 // Save and display output on Ctrl+C
 process.on('SIGINT', function() {
@@ -74,9 +82,9 @@ process.on('SIGINT', function() {
     clearTimeout(timeouts.shift());
   }
 
-  if(process.argv.length > 2) {
+  if(process.argv.length === 4) {
     try {
-      fs.writeFileSync(process.argv[2], JSON.stringify(memSnapshots));
+      fs.writeFileSync(process.argv[3], JSON.stringify(memSnapshots));
     } catch(err) {
       console.error('Unable to save output!');
     }
@@ -88,12 +96,35 @@ process.on('SIGINT', function() {
   console.log(babar(memSnapshots.heapUsed, { caption: "heapUsed (MB)" }));
   console.log(babar(memSnapshots.responseTimes, { caption: "responseTimes (ms)" }));
 
-  liveDb.cleanup(process.exit);
+  if (PACKAGE === 'reactive-postgres') {
+
+  }
+  else if (PACKAGE === 'pg-live-select') {
+    reactiveQueries.cleanup(process.exit);
+  }
+  else if (PACKAGE === 'pg-live-query') {
+
+  }
 
   pool.end();
 });
 
-var liveDb = new LivePg(CONN_STR, 'my_channel');
+var reactiveQueries;
+if (PACKAGE === 'reactive-postgres') {
+
+}
+else if (PACKAGE === 'pg-live-select') {
+  var LivePg = require('pg-live-select');
+  reactiveQueries = new LivePg(CONN_STR, 'my_channel');
+}
+else if (PACKAGE === 'pg-live-query') {
+
+}
+else {
+  throw Error("Unknown package to test.");
+}
+
+console.log("Installing data...");
 
 // Install sample dataset and begin test queries
 install(pool, GEN_SETTINGS, function(error) {
@@ -101,10 +132,17 @@ install(pool, GEN_SETTINGS, function(error) {
 
   console.log('Data installed! Beginning test queries...');
 
-  var liveQueryText = fs.readFileSync('livequery.sql').toString();
-  for(var classId = 1; classId < LIVE_SELECT_COUNT + 1; classId++) {
-    liveDb.select(liveQueryText, [ classId ])
-      .on('update', function(diff, data) {
+  // Record memory usage every second
+  setInterval(recordMemory, 1000);
+  recordMemory();
+
+  var reactiveQueryText = fs.readFileSync('reactivequery.sql').toString();
+  for(var classId = 1; classId <= REACTIVE_QUERIES_COUNT; classId++) {
+    if (PACKAGE === 'reactive-postgres') {
+
+    }
+    else if (PACKAGE === 'pg-live-select') {
+      reactiveQueries.select(reactiveQueryText, [ classId ]).on('update', function(diff, data) {
         if(diff && diff.added && diff.added.length === 1) {
           var start = insertTimes[diff.added[0].score_id];
           if(typeof start === undefined) {
@@ -118,6 +156,10 @@ install(pool, GEN_SETTINGS, function(error) {
 
         runState.eventCount++;
       });
+    }
+    else if (PACKAGE === 'pg-live-query') {
+
+    }
   }
 
   QUERIES.forEach(function(description) {
