@@ -81,7 +81,7 @@ function recordMemory() {
   measurements.heapTotal.push([ elapsed, memUsage.heapTotal / 1024 / 1024 ]);
   measurements.heapUsed.push([ elapsed, memUsage.heapUsed / 1024 / 1024 ]);
 
-  process.stdout.write('\r ' + Math.floor(elapsed) + ' seconds elapsed...');
+  process.stdout.write('\r ' + Math.floor(elapsed) + ' seconds elapsed... (' + Object.keys(insertTimes).length + ' unconfirmed changes)');
 }
 
 // Save and display output on Ctrl+C
@@ -94,7 +94,7 @@ process.on('SIGINT', function() {
     try {
       fs.writeFileSync(process.argv[3], JSON.stringify(measurements, null, 2));
     } catch(err) {
-      console.error('Unable to save output!');
+      console.error('Unable to save output!', error);
     }
   }
 
@@ -172,11 +172,6 @@ install(pool, GEN_SETTINGS, function(error) {
         handle.on('insert', function(row) {
           runState.eventCount++;
 
-          var unconfirmed = Object.keys(insertTimes).length;
-          if (unconfirmed > 10 * ALL_QUERIES_PER_SECOND) {
-            console.log('Unconfirmed queries are growing', unconfirmed);
-          }
-
           if (!ready) {
             return;
           }
@@ -199,11 +194,6 @@ install(pool, GEN_SETTINGS, function(error) {
     else if (PACKAGE === 'pg-live-select') {
       reactiveQueries.select(reactiveQueryText, [ classId ]).on('update', function(diff, data) {
         runState.eventCount++;
-
-        var unconfirmed = Object.keys(insertTimes).length;
-        if (unconfirmed > 10 * ALL_QUERIES_PER_SECOND) {
-          console.log('Unconfirmed queries are growing', unconfirmed);
-        }
 
         if(diff && diff.added && diff.added.length === 1) {
           var start = insertTimes[diff.added[0].score_id];
