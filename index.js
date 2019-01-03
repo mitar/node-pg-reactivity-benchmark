@@ -162,7 +162,7 @@ install(pool, GEN_SETTINGS, function(error) {
         mode = 'full';
       }
       reactiveQueries.query(
-        reactiveQueryText.replace('$1', "'" + classId + "'"),
+        reactiveQueryText.replace('$1',  '' + classId),
         {
           uniqueColumn: 'score_id',
           mode: mode,
