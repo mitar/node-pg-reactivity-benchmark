@@ -38,6 +38,7 @@ var runState = {
   changesCount: 0,
 };
 
+var recordMemoryInterval = null;
 var timeouts = [];
 
 var unconfirmedInserts = {};
@@ -103,6 +104,8 @@ function interruptHandler() {
 
   // So that double Ctrl+C kills it.
   process.off('SIGINT', interruptHandler);
+
+  clearInterval(recordMemoryInterval);
 
   while (timeouts.length) {
     clearTimeout(timeouts.shift());
@@ -174,7 +177,7 @@ install(pool, GEN_SETTINGS, function(error) {
   startTime = Date.now();
 
   // Record memory usage every second
-  setInterval(recordMemory, 1000);
+  recordMemoryInterval = setInterval(recordMemory, 1000);
   recordMemory();
 
   var reactiveQueryText = fs.readFileSync('reactivequery.sql').toString();
