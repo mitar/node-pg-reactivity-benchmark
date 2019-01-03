@@ -6,25 +6,22 @@ var install = require('./lib/install');
 
 // Connect to this database
 var CONN_STR = 'postgres://postgres:pass@127.0.0.1/postgres';
+
+// Instantiate this many reactive queries
+var REACTIVE_QUERIES_COUNT = 50;
+
 // Generate this much sample data (see lib/install.js)
 var GEN_SETTINGS = [
-  200, // class count
+  REACTIVE_QUERIES_COUNT * 4, // class count
   30, // assignments per class
   20, // students per class
   6  // classes per student
 ];
 
-// Instantiate this many reactive queries
-var REACTIVE_QUERIES_COUNT = 50;
-
 // Relative to generated data set
 var ASSIGN_COUNT = GEN_SETTINGS[0] * GEN_SETTINGS[1];
 var STUDENT_COUNT = Math.ceil(GEN_SETTINGS[0] / GEN_SETTINGS[3]) * GEN_SETTINGS[2];
 var SCORES_COUNT = ASSIGN_COUNT * GEN_SETTINGS[2];
-
-if (REACTIVE_QUERIES_COUNT > GEN_SETTINGS[0]) {
-  throw new Error("Too many reactive queries for generated data.");
-}
 
 if (process.argv.length < 3 || process.argv.length > 4) {
   throw Error("Invalid number of arguments.")
@@ -38,7 +35,7 @@ var pool = new Pool({
 
 var runState = {
   eventCount: 0,
-  scoresCount: SCORES_COUNT
+  changesCount: 0,
 };
 
 var timeouts = [];
@@ -52,9 +49,10 @@ var QUERIES = [
     query: 'INSERT INTO scores (id, assignment_id, student_id, score)' +
       ' VALUES ($1, $2, $3, $4)',
     params: function() {
-      insertTimes[++runState.scoresCount] = Date.now();
+      runState.changesCount++;
+      insertTimes[runState.changesCount + SCORES_COUNT] = Date.now();
       return [
-        runState.scoresCount,
+        runState.changesCount + SCORES_COUNT,
         Math.ceil(Math.random() * ASSIGN_COUNT),
         Math.ceil(Math.random() * STUDENT_COUNT),
         Math.ceil(Math.random() * 100)
@@ -63,7 +61,7 @@ var QUERIES = [
   }
 ];
 
-var startTime = Date.now();
+var startTime;
 var memSnapshots = { heapTotal: [], heapUsed: [], responseTimes: [] };
 
 function recordMemory() {
@@ -91,6 +89,8 @@ process.on('SIGINT', function() {
   }
 
   console.log('\n Final Runtime Status:', runState);
+  // This is probabilistic, only a fraction of all changes should happen to reactive queries
+  console.log(' Approximate Changes Made To Reactive Queries:', runState.changesCount / (GEN_SETTINGS[0] / REACTIVE_QUERIES_COUNT));
 
   console.log(babar(memSnapshots.heapTotal, { caption: "heapTotal (MB)" }));
   console.log(babar(memSnapshots.heapUsed, { caption: "heapUsed (MB)" }));
@@ -131,6 +131,8 @@ install(pool, GEN_SETTINGS, function(error) {
   if(error) throw error;
 
   console.log('Data installed! Beginning test queries...');
+
+  startTime = Date.now();
 
   // Record memory usage every second
   setInterval(recordMemory, 1000);
