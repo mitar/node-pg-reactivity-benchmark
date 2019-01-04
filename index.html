@@ -1,6 +1,6 @@
 <html>
   <head>
-    <script type="text/javascript" src="https://www.google.com/jsapi?autoload={'modules':[{'name':'visualization','version':'1','packages':['annotationchart']}]}"></script>
+    <script type="text/javascript" src="https://www.google.com/jsapi?autoload={'modules':[{'name':'visualization','version':'1','packages':['annotationchart','corechart']}]}"></script>
     <script type='text/javascript'>
       var syncJax = function(href){
         var request = new XMLHttpRequest();
@@ -13,32 +13,30 @@
         var rawData = JSON.parse(syncJax(filename));
       }
 
-      google.load('visualization', '1', {'packages':['annotationchart']});
+      google.load('visualization', '1', {'packages':['annotationchart','corechart']});
 
       function drawChart(element, dataSet, label) {
         var data = new google.visualization.DataTable();
-        data.addColumn('date', 'Date');
+        data.addColumn('datetime', 'Date');
 
         dataSet.forEach(function(key, i) {
           data.addColumn('number', label[i]);
-          data.addColumn('string', key + ' title');
-          data.addColumn('string', key + ' text');
         });
 
         var firstSet = rawData[dataSet[0]];
         if(!(firstSet instanceof Array)) {
-          return console.log('Dataset missing: ' + dataSet[0]);
+          console.log('Dataset missing: ' + dataSet[0]);
+          return;
         }
 
         data.addRows(firstSet.map(function(evt, index) {
           var row = [
-            new Date(2000, 0, 0, 0, 0, evt[0]), evt[1], undefined, undefined ];
+            new Date(2000, 0, 0, 0, 0, Math.floor(evt[0]), Math.floor(evt[0] * 1000 % 1000)), evt[1],
+          ];
 
           if(dataSet.length > 1) {
             for(var i = 1; i < dataSet.length; i++) {
               row.push(rawData[dataSet[i]][index][1]);
-              row.push(undefined);
-              row.push(undefined);
             }
           }
           return row;
@@ -47,7 +45,26 @@
         var chart = new google.visualization.AnnotationChart(element);
 
         var options = {
-          displayAnnotations: true
+          displayAnnotations: false
+        };
+
+        chart.draw(data, options);
+      }
+
+      function drawHistogram(element, dataSet, label) {
+        var data = new google.visualization.DataTable();
+        data.addColumn('number', label);
+
+        data.addRows(rawData[dataSet].map(function(evt, index) {
+          return [evt[1]];
+        }));
+
+        var chart = new google.visualization.Histogram(element);
+
+        var options = {
+          legend: {position: 'none'},
+          hAxis: {title: label},
+          chartArea: {left:0, top:0, width: '100%', height: '80%'},
         };
 
         chart.draw(data, options);
@@ -60,6 +77,8 @@
           [ 'heapTotal', 'heapUsed' ], [ 'heapTotal (MB)', 'heapUsed (MB)' ]);
         drawChart(document.getElementById('response_times_chart'),
           [ 'responseTimes' ], [ 'responseTimes (ms)' ]);
+        drawHistogram(document.getElementById('response_times_histogram_chart'),
+          'responseTimes', 'responseTimes (ms)');
       });
     </script>
     <style>
@@ -76,5 +95,7 @@
     <div id='memory_chart' style='width: 900px; height: 500px;'></div>
     <h1>Response Times</h1>
     <div id='response_times_chart' style='width: 900px; height: 500px;'></div>
+    <h1>Response Times Histogram</h1>
+    <div id='response_times_histogram_chart' style='width: 900px; height: 500px;'></div>
   </body>
 </html>

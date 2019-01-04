@@ -4,6 +4,7 @@ var Worker = require('worker_threads').Worker;
 
 var babar = require('babar');
 var Pool = require('pg').Pool;
+var stats = require('stats-lite');
 
 var install = require('./lib/install');
 
@@ -130,9 +131,22 @@ function interruptHandler() {
 
     console.log('\n Final Runtime Status:', runState);
 
+    var responseTimes = measurements.responseTimes.map(function (responseTime) {
+      return responseTime[1];
+    });
+
+    console.log(" Response Times Mean: %s", stats.mean(responseTimes));
+    console.log(" Response Times Standard Deviation: %s", stats.stdev(responseTimes));
+
+    var histogram = stats.histogram(responseTimes, 50);
+    histogram = histogram.values.map(function (value, i) {
+      return [histogram.binLimits[0] + i * histogram.binWidth, value];
+    });
+
     console.log(babar(measurements.heapTotal, { caption: "heapTotal (MB)" }));
     console.log(babar(measurements.heapUsed, { caption: "heapUsed (MB)" }));
     console.log(babar(measurements.responseTimes, { caption: "responseTimes (ms)" }));
+    console.log(babar(histogram, { caption: "responseTimes histogram" }));
 
     pool.end();
 
