@@ -7,7 +7,9 @@ at the same time measuring the performance of reactive queries using different p
  * [`pg-live-query`](https://github.com/nothingisdead/pg-live-query)
 
 A reading of [`index.js`](./index.js) (variable `QUERIES`) is recommended to understand the operations
-performed. See [`livequery.sql`](reactivequery.sql) for a reactive query used.
+performed. See [`livequery.sql`](reactivequery.sql) for a reactive query used. By default,
+the benchmark opens 50 parallel reactive queries, each reactive query having a different
+`assignments.class_id` condition, and inserts 100 rows into `scores` table per second.
 
 The following commands can be used to get the application running on your machine:
 
@@ -31,10 +33,21 @@ The first argument tell which package/configuration to use. Available options ar
 
 Run it for a minute or more and press `ctrl+c` to exit and display benchmark graphs.
 
-If an output file is specified, it may be viewed using [`index.html`](./index.html).
-
 The following measurements are done:
 * [Used node heap](https://nodejs.org/api/process.html#process_process_memoryusage) every second.
 * [Total node heap](https://nodejs.org/api/process.html#process_process_memoryusage) every second.
 * Time between a data modification query being issued to the database, and when a reactive
   query emitted a corresponding event.
+
+## Results viewer
+
+If an output file is specified, it may be viewed using [`viewer.html`](./viewer.html).
+To use this test result viewer, first start a web server in the root directory of the
+repository:
+
+```bash
+$ python -m SimpleHTTPServer
+```
+
+Then load the output JSON file by specifying it in the query string:
+[`http://localhost:8000/viewer.html?out.json`](http://localhost:8000/viewer.html?out.json)
