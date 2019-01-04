@@ -1,4 +1,6 @@
 var fs = require('fs');
+var Worker = require('worker_threads').Worker;
+
 var babar = require('babar');
 var Pool = require('pg').Pool;
 
@@ -74,15 +76,17 @@ for (var i = 0; i < QUERIES.length; i++) {
   ALL_QUERIES_PER_SECOND += QUERIES.execPerSecond;
 }
 
+var worker = new Worker('./worker.js');
+worker.unref();
+
 var startTime;
-var measurements = { heapTotal: [], heapUsed: [], responseTimes: [] };
 
 function recordMemory() {
   var memUsage = process.memoryUsage();
   var elapsed = (Date.now() - startTime) / 1000;
 
-  measurements.heapTotal.push([ elapsed, memUsage.heapTotal / 1024 / 1024 ]);
-  measurements.heapUsed.push([ elapsed, memUsage.heapUsed / 1024 / 1024 ]);
+  worker.postMessage({type: 'heapTotal', value: [ elapsed, memUsage.heapTotal / 1024 / 1024 ]});
+  worker.postMessage({type: 'heapUsed', value: [ elapsed, memUsage.heapUsed / 1024 / 1024 ]});
 
   var now = Date.now();
   var inserts = Object.values(unconfirmedInserts).length;
@@ -111,34 +115,41 @@ function interruptHandler() {
     clearTimeout(timeouts.shift());
   }
 
-  if(process.argv.length === 4) {
-    try {
-      fs.writeFileSync(process.argv[3], JSON.stringify(measurements, null, 2));
-    } catch(err) {
-      console.error('Unable to save output!', error);
+  worker.once('message', (measurements) => {
+    worker.terminate();
+    worker = null;
+
+    if(process.argv.length === 4) {
+      try {
+        fs.writeFileSync(process.argv[3], JSON.stringify(measurements, null, 2));
+      } catch(err) {
+        console.error('Unable to save output!', error);
+      }
     }
-  }
 
-  console.log('\n Final Runtime Status:', runState);
+    console.log('\n Final Runtime Status:', runState);
 
-  console.log(babar(measurements.heapTotal, { caption: "heapTotal (MB)" }));
-  console.log(babar(measurements.heapUsed, { caption: "heapUsed (MB)" }));
-  console.log(babar(measurements.responseTimes, { caption: "responseTimes (ms)" }));
+    console.log(babar(measurements.heapTotal, { caption: "heapTotal (MB)" }));
+    console.log(babar(measurements.heapUsed, { caption: "heapUsed (MB)" }));
+    console.log(babar(measurements.responseTimes, { caption: "responseTimes (ms)" }));
 
-  pool.end();
+    pool.end();
 
-  if (PACKAGE === 'reactive-postgres-id' || PACKAGE === 'reactive-postgres-changed' || PACKAGE === 'reactive-postgres-full') {
-    reactiveQueries.stop().then(process.exit).catch(function(error) {
-      console.error("Error stopping manager.", error);
-      process.exit(1);
-    });
-  }
-  else if (PACKAGE === 'pg-live-select') {
-    reactiveQueries.cleanup(process.exit);
-  }
-  else if (PACKAGE === 'pg-live-query') {
+    if (PACKAGE === 'reactive-postgres-id' || PACKAGE === 'reactive-postgres-changed' || PACKAGE === 'reactive-postgres-full') {
+      reactiveQueries.stop().then(process.exit).catch(function(error) {
+        console.error("Error stopping manager.", error);
+        process.exit(1);
+      });
+    }
+    else if (PACKAGE === 'pg-live-select') {
+      reactiveQueries.cleanup(process.exit);
+    }
+    else if (PACKAGE === 'pg-live-query') {
 
-  }
+    }
+  });
+
+  worker.postMessage({type: 'get'});
 }
 
 // Save and display output on Ctrl+C
@@ -221,7 +232,7 @@ install(pool, GEN_SETTINGS, function(error) {
           } else {
             var now = Date.now();
             var elapsed = (now - startTime) / 1000;
-            measurements.responseTimes.push([ elapsed, now - start ]);
+            worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
             delete insertTimes[row.score_id];
           }
         });
@@ -249,7 +260,7 @@ install(pool, GEN_SETTINGS, function(error) {
           } else {
             var now = Date.now();
             var elapsed = (now - startTime) / 1000;
-            measurements.responseTimes.push([ elapsed, now - start ]);
+            worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
             delete insertTimes[diff.added[i].score_id];
           }
         }
