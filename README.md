@@ -51,3 +51,21 @@ $ python -m SimpleHTTPServer
 
 Then load the output JSON file by specifying it in the query string:
 [`http://localhost:8000/viewer.html?out.json`](http://localhost:8000/viewer.html?out.json)
+
+## Results
+
+Evaluated using node v11.6.0 on Linux and this [PostgreSQL 11.1 Docker image](https://github.com/mitar/docker-postgres).
+The following command was used for each of the available packages/configurations:
+
+```bash
+$ timeout --foreground --signal=INT --kill-after=5 300 node --experimental-worker --expose-gc index.js package <package>.json
+```
+
+Results are available through web viewer:
+
+* [`reactive-postgres-id`](https://mitar.github.io/node-pg-reactivity-benchmark/viewer.html?results/reactive-postgres-id.json)
+* [`reactive-postgres-changed`](https://mitar.github.io/node-pg-reactivity-benchmark/viewer.html?results/reactive-postgres-changed.json)
+* [`reactive-postgres-full`](https://mitar.github.io/node-pg-reactivity-benchmark/viewer.html?results/reactive-postgres-full.json)
+* [`pg-live-select`](https://mitar.github.io/node-pg-reactivity-benchmark/viewer.html?results/pg-live-select.json)
+* [`pg-live-query-watch`](https://mitar.github.io/node-pg-reactivity-benchmark/viewer.html?results/pg-live-query-watch.json)
+* [`pg-live-query-query`](https://mitar.github.io/node-pg-reactivity-benchmark/viewer.html?results/pg-live-query-query.json)
