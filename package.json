@@ -9,7 +9,8 @@
     "pg": "~7.7.1",
     "pg-live-query": "1.0.1",
     "pg-live-select": "git://github.com/mitar/pg-live-query.git#mitar",
-    "random-strings": "~0.0.1"
+    "random-strings": "~0.0.1",
+    "reactive-postgres": "git://github.com/tozd/node-reactive-postgres.git#master"
   },
   "engines": {
     "node": ">=0.10.0"

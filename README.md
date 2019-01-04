@@ -26,8 +26,8 @@ The first argument tell which package/configuration to use. Available options ar
 * `reactive-postgres-changed`: in `changed` mode
 * `reactive-postgres-full`: in `full` mode
 * `pg-live-select`
-* `pg-live-query-watch`: using `watch`
-* `pg-live-query-query`: using `query`
+* `pg-live-query-watch`: using `watch` (unstable initialization, has to be tried multiple times)
+* `pg-live-query-query`: using `query` (unstable initialization, has to be tried multiple times)
 
 Run it for a minute or more and press `ctrl+c` to exit and display benchmark graphs.
 
@@ -38,7 +38,3 @@ The following measurements are done:
 * [Total node heap](https://nodejs.org/api/process.html#process_process_memoryusage) every second.
 * Time between a data modification query being issued to the database, and when a reactive
   query emitted a corresponding event.
-
-## License
-
-MIT
