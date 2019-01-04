@@ -226,7 +226,6 @@ install(pool, GEN_SETTINGS, function(error) {
           mode: mode,
         },
       ).then(function(handle) {
-        var ready = false;
         handle.on('insert', function(row) {
           runState.eventCount++;
 
