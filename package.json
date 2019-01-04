@@ -7,8 +7,8 @@
   "dependencies": {
     "babar": "~0.0.3",
     "pg": "~7.7.1",
-    "pg-live-query": "1.0.1",
-    "pg-live-select": "git://github.com/mitar/pg-live-query.git#mitar",
+    "pg-live-query": "git://github.com/mitar/pg-live-query.git#mitar",
+    "pg-live-select": "1.0.3",
     "random-strings": "~0.0.1",
     "reactive-postgres": "git://github.com/tozd/node-reactive-postgres.git#master"
   },
