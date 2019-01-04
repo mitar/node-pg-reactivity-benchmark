@@ -1,3 +1,4 @@
+var assert = require('assert');
 var fs = require('fs');
 var Worker = require('worker_threads').Worker;
 
@@ -145,7 +146,7 @@ function interruptHandler() {
       reactiveQueries.cleanup(process.exit);
     }
     else if (PACKAGE === 'pg-live-query') {
-
+      process.exit(0);
     }
   });
 
@@ -168,8 +169,16 @@ else if (PACKAGE === 'pg-live-select') {
   var LivePg = require('pg-live-select');
   reactiveQueries = new LivePg(CONN_STR, 'my_channel');
 }
-else if (PACKAGE === 'pg-live-query') {
+else if (PACKAGE === 'pg-live-query-watch' || PACKAGE === 'pg-live-query-query') {
+  var LiveQuery = require('pg-live-query');
 
+  // Slight race condition here, but installing data should
+  // always take longer than connecting one client.
+  pool.connect(function(error, client, done) {
+    if (error) throw error;
+
+    reactiveQueries = new LiveQuery(client);
+  });
 }
 else {
   throw Error("Unknown package to test.");
@@ -266,8 +275,36 @@ install(pool, GEN_SETTINGS, function(error) {
         }
       });
     }
-    else if (PACKAGE === 'pg-live-query') {
+    else if (PACKAGE === 'pg-live-query-watch' || PACKAGE === 'pg-live-query-query') {
+      var handle;
+      if (PACKAGE === 'pg-live-query-watch') {
+        handle = reactiveQueries.watch(reactiveQueryText.replace('$1',  '' + classId));
+      }
+      else if (PACKAGE === 'pg-live-query-query') {
+        handle = reactiveQueries.query(reactiveQueryText.replace('$1',  '' + classId));
+      }
 
+      handle.on('insert', (id, row, cols) => {
+        runState.eventCount++;
+
+        assert(cols[3] === 'score_id');
+        var score_id = row[3];
+
+        // An update about initial scores.
+        if (score_id <= SCORES_COUNT) {
+          return;
+        }
+
+        var start = insertTimes[score_id];
+        if(typeof start === 'undefined') {
+          console.log('Unexpected update ' + score_id);
+        } else {
+          var now = Date.now();
+          var elapsed = (now - startTime) / 1000;
+          worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
+          delete insertTimes[score_id];
+        }
+      });
     }
   }
 
