@@ -9,6 +9,9 @@
     "pg": "~7.7.1",
     "pg-live-query": "git://github.com/mitar/pg-live-query.git#mitar",
     "pg-live-select": "1.0.3",
+    "pg-promise": "~8.5.4",
+    "pg-query-observer": "1.0.5",
+    "pg-table-observer": "git://github.com/mitar/pg-table-observer.git#mitar",
     "random-strings": "~0.0.1",
     "reactive-postgres": "git://github.com/tozd/node-reactive-postgres.git#master",
     "stats-lite": "~2.2.0"

@@ -5,6 +5,7 @@ at the same time measuring the performance of reactive queries using different p
  * [`reactive-postgres`](https://github.com/tozd/node-reactive-postgres)
  * [`pg-live-select`](https://github.com/numtel/pg-live-select)
  * [`pg-live-query`](https://github.com/nothingisdead/pg-live-query)
+ * [`pg-query-observer`](https://github.com/Richie765/pg-query-observer)
 
 A reading of [`index.js`](./index.js) (variable `QUERIES`) is recommended to understand the operations
 performed. See [`livequery.sql`](reactivequery.sql) for a reactive query used. By default,
@@ -30,6 +31,7 @@ The first argument tell which package/configuration to use. Available options ar
 * `pg-live-select`
 * `pg-live-query-watch`: using `watch` (unstable initialization, has to be tried multiple times)
 * `pg-live-query-query`: using `query` (unstable initialization, has to be tried multiple times)
+* `pg-query-observer` (it does not work with multiple parallel queries)
 
 Run it for a minute or more and press `ctrl+c` to exit and display benchmark graphs.
 
@@ -69,3 +71,4 @@ Results are available through web viewer:
 * [`pg-live-select`](https://mitar.github.io/node-pg-reactivity-benchmark/viewer.html?results/pg-live-select.json)
 * [`pg-live-query-watch`](https://mitar.github.io/node-pg-reactivity-benchmark/viewer.html?results/pg-live-query-watch.json)
 * [`pg-live-query-query`](https://mitar.github.io/node-pg-reactivity-benchmark/viewer.html?results/pg-live-query-query.json)
+* pg-query-observer: does not work with multiple parallel queries

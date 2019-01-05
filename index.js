@@ -3,6 +3,7 @@ var fs = require('fs');
 var Worker = require('worker_threads').Worker;
 
 var babar = require('babar');
+var pgp = require('pg-promise')();
 var Pool = require('pg').Pool;
 var stats = require('stats-lite');
 
@@ -162,6 +163,15 @@ function interruptHandler() {
     else if (PACKAGE === 'pg-live-query') {
       process.exit(0);
     }
+    else if (PACKAGE === 'pg-query-observer') {
+      reactiveQueries.cleanup().then(function () {
+        pgp.end();
+        process.exit(0);
+      }).catch(function(error) {
+        console.error("Cleanup error.", error);
+        process.exit(1);
+      });
+    }
   });
 
   worker.postMessage({type: 'get'});
@@ -193,6 +203,20 @@ else if (PACKAGE === 'pg-live-query-watch' || PACKAGE === 'pg-live-query-query')
 
     reactiveQueries = new LiveQuery(client);
   });
+}
+else if (PACKAGE === 'pg-query-observer') {
+  var PgQueryObserver = require('pg-query-observer').PgQueryObserver;
+  var PgTableObserver = require('pg-table-observer').PgTableObserver;
+
+  var db = pgp(CONN_STR);
+
+  reactiveQueries = new PgQueryObserver(db, 'myapp', {
+    // To match default in reactive-postgres package.
+    trigger_delay: 100,
+    keyfield: 'score_id',
+  });
+  // We override it with our (fixed) version of table observer.
+  reactiveQueries.table_observer = new PgTableObserver(db, 'myapp');
 }
 else {
   throw Error("Unknown package to test.");
@@ -317,6 +341,30 @@ install(pool, GEN_SETTINGS, function(error) {
           worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
           delete insertTimes[score_id];
         }
+      });
+    }
+    else if (PACKAGE === 'pg-query-observer') {
+      reactiveQueries.notify(reactiveQueryText, [ classId ], function (change) {return true}, function (diff) {
+        runState.eventCount++;
+
+        for (var i = 0; i < diff.added.length; i++) {
+          // An update about initial scores.
+          if (diff.added[i].score_id <= SCORES_COUNT) {
+            continue;
+          }
+          var start = insertTimes[diff.added[i].score_id];
+          if(typeof start === 'undefined') {
+            console.log('Unexpected update ' + diff.added[i].score_id);
+          } else {
+            var now = Date.now();
+            var elapsed = (now - startTime) / 1000;
+            worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
+            delete insertTimes[diff.added[i].score_id];
+          }
+        }
+      }).catch(function (error) {
+        console.error("Error creating a handle.", error);
+        process.exit(1);
       });
     }
   }
