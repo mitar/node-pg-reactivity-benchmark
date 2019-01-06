@@ -320,7 +320,7 @@ install(pool, GEN_SETTINGS, function(error) {
 
           var start = insertTimes.get(row.score_id);
           if(typeof start === 'undefined') {
-            console.log('Unexpected update ' + row.score_id);
+            console.log('Unexpected insert ' + row.score_id);
           } else {
             var now = Date.now();
             var elapsed = (now - startTime) / 1000;
@@ -351,25 +351,68 @@ install(pool, GEN_SETTINGS, function(error) {
       });
     }
     else if (PACKAGE === 'pg-live-select') {
-      reactiveQueries.select(reactiveQueryText, [ classId ]).on('update', function(diff, data) {
-        runState.eventCount++;
+      (function () {
+        var mapIndexToScoreId = new Map();
+        reactiveQueries.select(reactiveQueryText, [ classId ]).on('update', function(diff, data) {
+          runState.eventCount++;
 
-        for (var i = 0; i < diff.added.length; i++) {
-          // An update about initial scores.
-          if (diff.added[i].score_id <= SCORES_COUNT) {
-            continue;
+          var updated = new Set();
+
+          if (diff.removed) {
+            REMOVED: for (var i = 0; i < diff.removed.length; i++) {
+              var scoreId = mapIndexToScoreId.get(diff.removed[i]._index);
+              mapIndexToScoreId.delete(diff.removed[i]._index);
+              if(typeof scoreId === 'undefined') {
+                console.log('Unexpected removal ' + diff.removed[i]._index);
+              } else {
+                // Is update?
+                var added = diff.added || [];
+                for (var j = 0; j < added.length; j++) {
+                  if (added[j]._index === diff.removed[i]._index) {
+                    updated.add(scoreId);
+                    // Yes it is.
+                    var start = updateTimes.get(scoreId);
+                    if(typeof start === 'undefined') {
+                      console.log('Unexpected update ' + scoreId);
+                    } else {
+                      var now = Date.now();
+                      var elapsed = (now - startTime) / 1000;
+                      worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
+                      updateTimes.delete(scoreId);
+                    }
+
+                    continue REMOVED;
+                  }
+                }
+
+                // TODO: Process removed.
+              }
+            }
           }
-          var start = insertTimes.get(diff.added[i].score_id);
-          if(typeof start === 'undefined') {
-            console.log('Unexpected update ' + diff.added[i].score_id);
-          } else {
-            var now = Date.now();
-            var elapsed = (now - startTime) / 1000;
-            worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
-            delete insertTimes.delete(diff.added[i].score_id);
+
+          if (diff.added) {
+            for (var i = 0; i < diff.added.length; i++) {
+              mapIndexToScoreId.set(diff.added[i]._index, diff.added[i].score_id);
+              // An update about initial scores.
+              if (diff.added[i].score_id <= SCORES_COUNT) {
+                continue;
+              }
+              if (updated.has(diff.added[i].score_id)) {
+                continue;
+              }
+              var start = insertTimes.get(diff.added[i].score_id);
+              if(typeof start === 'undefined') {
+                console.log('Unexpected insert ' + diff.added[i].score_id);
+              } else {
+                var now = Date.now();
+                var elapsed = (now - startTime) / 1000;
+                worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
+                insertTimes.delete(diff.added[i].score_id);
+              }
+            }
           }
-        }
-      });
+        });
+      })();
     }
     else if (PACKAGE === 'pg-live-query-watch' || PACKAGE === 'pg-live-query-query') {
       var handle;
@@ -393,12 +436,29 @@ install(pool, GEN_SETTINGS, function(error) {
 
         var start = insertTimes.get(score_id);
         if(typeof start === 'undefined') {
-          console.log('Unexpected update ' + score_id);
+          console.log('Unexpected insert ' + score_id);
         } else {
           var now = Date.now();
           var elapsed = (now - startTime) / 1000;
           worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
-          delete insertTimes.delete(score_id);
+          insertTimes.delete(score_id);
+        }
+      });
+
+      handle.on('update', (id, row, cols) => {
+        runState.eventCount++;
+
+        assert(cols[3] === 'score_id');
+        var scoreId = row[3];
+
+        var start = updateTimes.get(scoreId);
+        if(typeof start === 'undefined') {
+          console.log('Unexpected update ' + scoreId);
+        } else {
+          var now = Date.now();
+          var elapsed = (now - startTime) / 1000;
+          worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
+          updateTimes.delete(scoreId);
         }
       });
     }
@@ -413,18 +473,20 @@ install(pool, GEN_SETTINGS, function(error) {
           }
           var start = insertTimes.get(diff.added[i].score_id);
           if(typeof start === 'undefined') {
-            console.log('Unexpected update ' + diff.added[i].score_id);
+            console.log('Unexpected insert ' + diff.added[i].score_id);
           } else {
             var now = Date.now();
             var elapsed = (now - startTime) / 1000;
             worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
-            delete insertTimes.delete(diff.added[i].score_id);
+            insertTimes.delete(diff.added[i].score_id);
           }
         }
       }).catch(function (error) {
         console.error("Error creating a handle.", error);
         process.exit(1);
       });
+
+      // TODO: Process updates and removals once package works.
     }
   }
 
