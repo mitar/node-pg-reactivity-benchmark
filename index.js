@@ -46,32 +46,72 @@ var runState = {
 var recordMemoryInterval = null;
 var timeouts = [];
 
-var unconfirmedInserts = {};
-var insertTimes = {};
+var insertsCount = 0;
+// Number of inserts which have not yet had insert query return
+var unconfirmedInserts = 0;
+// A map between inserts (score ID) and timestamp on the client
+var insertTimes = new Map();
+
+// Number of updates which have not yet had update query return
+var unconfirmedUpdates = 0;
+// A map between updates (score ID) and timestamp on the client
+var updateTimes = new Map();
+var recentUpdateIds = [];
 
 // Description of queries to perform
 var QUERIES = [
+  // Inserts
   {
     execPerSecond: 100,
     query: 'INSERT INTO scores (id, assignment_id, student_id, score)' +
       ' VALUES ($1, $2, $3, $4)',
     params: function() {
       runState.changesCount++;
+      insertsCount++;
       var assignmentId = Math.ceil(Math.random() * ASSIGN_COUNT);
       var classId = ((assignmentId - 1) % GEN_SETTINGS[0]) + 1;
-      var scoreId = runState.changesCount + SCORES_COUNT;
+      var scoreId = insertsCount + SCORES_COUNT;
       // Only for these we have reactive queries.
       if (1 <= classId && classId <= REACTIVE_QUERIES_COUNT) {
-        insertTimes[scoreId] = Date.now();
+        insertTimes.set(scoreId, Date.now());
       }
       return [
         scoreId,
         assignmentId,
         Math.ceil(Math.random() * STUDENT_COUNT),
-        Math.ceil(Math.random() * 100)
+        Math.ceil(Math.random() * 100),
       ];
     }
-  }
+  },
+  // Updates
+  {
+    execPerSecond: 100,
+    query: 'UPDATE scores SET score=$2 WHERE score!=$2 AND id=$1 AND ((((assignment_id - 1) % ' + GEN_SETTINGS[0] + ') + 1) BETWEEN 1 AND ' + REACTIVE_QUERIES_COUNT + ')',
+    params: function() {
+      runState.changesCount++;
+      var scoreId;
+      var count = 0;
+      do {
+        // We do not use the most recent 1000
+        scoreId = Math.ceil(Math.random() * (insertsCount + SCORES_COUNT - 1000));
+        count += 1;
+        if (count === 1000) {
+          throw new Error("Looping too long to get a score id.");
+        }
+      }
+      // We are making sure we are not updating the same score twice
+      // So that the second update does not mask the first one
+      while (recentUpdateIds.indexOf(scoreId) > -1 || updateTimes.has(scoreId));
+      updateTimes.set(scoreId, Date.now());
+      recentUpdateIds.unshift(scoreId);
+      // We remember only the most recent 1000
+      recentUpdateIds = recentUpdateIds.slice(0, 1000);
+      return [
+        scoreId,
+        Math.ceil(Math.random() * 100),
+      ];
+    }
+  },
 ];
 
 var ALL_QUERIES_PER_SECOND = 0;
@@ -94,13 +134,17 @@ function recordMemory() {
   worker.postMessage({type: 'heapUsed', value: [ elapsed, memUsage.heapUsed / 1024 / 1024 ]});
 
   var now = Date.now();
-  var inserts = Object.values(unconfirmedInserts).length;
-  var unconfirmed = Object.values(insertTimes).length;
-  var longUnconfirmed = Object.values(insertTimes).filter(function(timestamp) {
+  var changes = insertTimes.size + updateTimes.size;
+  var longChanges = Array.from(insertTimes.values()).concat(Array.from(updateTimes.values())).filter(function(timestamp) {
     return timestamp < now - 5 * 1000;
   }).length;
 
-  process.stdout.write('\r ' + Math.floor(elapsed) + ' seconds elapsed... (' + inserts + ' unconfirmed inserts, ' + unconfirmed + ' unconfirmed changes, ' + longUnconfirmed + ' unconfirmed changes > 5s)');
+  process.stdout.write('\r ' + Math.floor(elapsed) + ' seconds elapsed... ('
+    + unconfirmedInserts + ' unconfirmed inserts, '
+    + unconfirmedUpdates + ' unconfirmed updates, '
+    + changes + ' unconfirmed changes, '
+    + longChanges + ' unconfirmed changes > 5s)'
+  );
 }
 
 var interrupted = false;
@@ -274,14 +318,27 @@ install(pool, GEN_SETTINGS, function(error) {
             return;
           }
 
-          var start = insertTimes[row.score_id];
+          var start = insertTimes.get(row.score_id);
           if(typeof start === 'undefined') {
             console.log('Unexpected update ' + row.score_id);
           } else {
             var now = Date.now();
             var elapsed = (now - startTime) / 1000;
             worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
-            delete insertTimes[row.score_id];
+            insertTimes.delete(row.score_id);
+          }
+        });
+        handle.on('update', function(row) {
+          runState.eventCount++;
+
+          var start = updateTimes.get(row.score_id);
+          if(typeof start === 'undefined') {
+            console.log('Unexpected update ' + row.score_id);
+          } else {
+            var now = Date.now();
+            var elapsed = (now - startTime) / 1000;
+            worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
+            updateTimes.delete(row.score_id);
           }
         });
         handle.start().catch(function(error) {
@@ -302,14 +359,14 @@ install(pool, GEN_SETTINGS, function(error) {
           if (diff.added[i].score_id <= SCORES_COUNT) {
             continue;
           }
-          var start = insertTimes[diff.added[i].score_id];
+          var start = insertTimes.get(diff.added[i].score_id);
           if(typeof start === 'undefined') {
             console.log('Unexpected update ' + diff.added[i].score_id);
           } else {
             var now = Date.now();
             var elapsed = (now - startTime) / 1000;
             worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
-            delete insertTimes[diff.added[i].score_id];
+            delete insertTimes.delete(diff.added[i].score_id);
           }
         }
       });
@@ -334,14 +391,14 @@ install(pool, GEN_SETTINGS, function(error) {
           return;
         }
 
-        var start = insertTimes[score_id];
+        var start = insertTimes.get(score_id);
         if(typeof start === 'undefined') {
           console.log('Unexpected update ' + score_id);
         } else {
           var now = Date.now();
           var elapsed = (now - startTime) / 1000;
           worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
-          delete insertTimes[score_id];
+          delete insertTimes.delete(score_id);
         }
       });
     }
@@ -354,14 +411,14 @@ install(pool, GEN_SETTINGS, function(error) {
           if (diff.added[i].score_id <= SCORES_COUNT) {
             continue;
           }
-          var start = insertTimes[diff.added[i].score_id];
+          var start = insertTimes.get(diff.added[i].score_id);
           if(typeof start === 'undefined') {
             console.log('Unexpected update ' + diff.added[i].score_id);
           } else {
             var now = Date.now();
             var elapsed = (now - startTime) / 1000;
             worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
-            delete insertTimes[diff.added[i].score_id];
+            delete insertTimes.delete(diff.added[i].score_id);
           }
         }
       }).catch(function (error) {
@@ -371,19 +428,36 @@ install(pool, GEN_SETTINGS, function(error) {
     }
   }
 
-  QUERIES.forEach(function(description) {
+  QUERIES.forEach(function(description, i) {
     timeouts.push(setInterval(function() {
       pool.connect(function(error, client, done) {
         if(error) throw error;
 
         var params = description.params();
-        if (typeof insertTimes[params[0]] !== 'undefined') {
-          unconfirmedInserts[params[0]] = true;
+        var insertedForReactiveQuery = insertTimes.has(params[0]);
+        // Second query is update.
+        var updated = i === 1;
+        if (insertedForReactiveQuery) {
+          unconfirmedInserts += 1;
+        }
+        else if (updated) {
+          assert(updateTimes.has(params[0]));
+          unconfirmedUpdates += 1;
         }
         client.query(description.query, params,
           function(error, result) {
             done();
-            delete unconfirmedInserts[params[0]];
+            // Update query did not match anything, revert
+            if (result.command === 'UPDATE' && result.rowCount === 0) {
+              assert(updateTimes.has(params[0]));
+              updateTimes.delete(params[0]);
+            }
+            if (insertedForReactiveQuery) {
+              unconfirmedInserts -= 1;
+            }
+            else if (updated) {
+              unconfirmedUpdates -= 1;
+            }
             if(error) throw error;
           }
         );
