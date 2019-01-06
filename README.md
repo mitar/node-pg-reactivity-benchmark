@@ -10,7 +10,8 @@ at the same time measuring the performance of reactive queries using different p
 A reading of [`index.js`](./index.js) (variable `QUERIES`) is recommended to understand the operations
 performed. See [`livequery.sql`](reactivequery.sql) for a reactive query used. By default,
 the benchmark opens 50 parallel reactive queries, each reactive query having a different
-`assignments.class_id` condition, and inserts 100 rows into `scores` table per second.
+`assignments.class_id` condition, and inserts 100 rows into `scores` table per second,
+updates 100 rows in `scores` table per second, and deletes 100 rows from `scores` table per second.
 
 The following commands can be used to get the application running on your machine:
 
@@ -56,7 +57,8 @@ Then load the output JSON file by specifying it in the query string:
 
 ## Results
 
-Evaluated using node v11.6.0 on Linux and this [PostgreSQL 11.1 Docker image](https://github.com/mitar/docker-postgres).
+Evaluated using node v11.6.0 on Linux and [PostgreSQL 11.1 Docker image](https://hub.docker.com/_/postgres/),
+`postgres:11.1`, with default configuration.
 The following command was used for each of the available packages/configurations:
 
 ```bash
