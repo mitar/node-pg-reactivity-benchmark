@@ -58,6 +58,12 @@ var unconfirmedUpdates = 0;
 var updateTimes = new Map();
 var recentUpdateIds = [];
 
+// Number of deletes which have not yet had delete query return
+var unconfirmedDeletes = 0;
+// A map between deletes (score ID) and timestamp on the client
+var deleteTimes = new Map();
+var recentDeleteIds = [];
+
 // Description of queries to perform
 var QUERIES = [
   // Inserts
@@ -99,9 +105,14 @@ var QUERIES = [
           throw new Error("Looping too long to get a score id.");
         }
       }
-      // We are making sure we are not updating the same score twice
-      // So that the second update does not mask the first one
-      while (recentUpdateIds.indexOf(scoreId) > -1 || updateTimes.has(scoreId));
+      // We are making sure we are not changing the same score twice
+      // So that the second change does not mask the first one
+      while (
+        recentUpdateIds.indexOf(scoreId) > -1
+        || recentDeleteIds.indexOf(scoreId) > -1
+        || updateTimes.has(scoreId)
+        || deleteTimes.has(scoreId)
+      );
       updateTimes.set(scoreId, Date.now());
       recentUpdateIds.unshift(scoreId);
       // We remember only the most recent 1000
@@ -109,6 +120,39 @@ var QUERIES = [
       return [
         scoreId,
         Math.ceil(Math.random() * 100),
+      ];
+    }
+  },
+  // Deletes
+  {
+    execPerSecond: 100,
+    query: 'DELETE FROM scores WHERE id=$1 AND ((((assignment_id - 1) % ' + GEN_SETTINGS[0] + ') + 1) BETWEEN 1 AND ' + REACTIVE_QUERIES_COUNT + ')',
+    params: function() {
+      runState.changesCount++;
+      var scoreId;
+      var count = 0;
+      do {
+        // We do not use the most recent 1000
+        scoreId = Math.ceil(Math.random() * (insertsCount + SCORES_COUNT - 1000));
+        count += 1;
+        if (count === 1000) {
+          throw new Error("Looping too long to get a score id.");
+        }
+      }
+      // We are making sure we are not changing the same score twice
+      // So that the second change does not mask the first one
+      while (
+        recentUpdateIds.indexOf(scoreId) > -1
+        || recentDeleteIds.indexOf(scoreId) > -1
+        || updateTimes.has(scoreId)
+        || deleteTimes.has(scoreId)
+      );
+      deleteTimes.set(scoreId, Date.now());
+      recentDeleteIds.unshift(scoreId);
+      // We remember only the most recent 1000
+      recentDeleteIds = recentDeleteIds.slice(0, 1000);
+      return [
+        scoreId,
       ];
     }
   },
@@ -134,14 +178,15 @@ function recordMemory() {
   worker.postMessage({type: 'heapUsed', value: [ elapsed, memUsage.heapUsed / 1024 / 1024 ]});
 
   var now = Date.now();
-  var changes = insertTimes.size + updateTimes.size;
-  var longChanges = Array.from(insertTimes.values()).concat(Array.from(updateTimes.values())).filter(function(timestamp) {
+  var changes = insertTimes.size + updateTimes.size + deleteTimes.size;
+  var longChanges = Array.from(insertTimes.values()).concat(Array.from(updateTimes.values()), Array.from(deleteTimes.values())).filter(function(timestamp) {
     return timestamp < now - 5 * 1000;
   }).length;
 
   process.stdout.write('\r ' + Math.floor(elapsed) + ' seconds elapsed... ('
     + unconfirmedInserts + ' unconfirmed inserts, '
     + unconfirmedUpdates + ' unconfirmed updates, '
+    + unconfirmedDeletes + ' unconfirmed deletes, '
     + changes + ' unconfirmed changes, '
     + longChanges + ' unconfirmed changes > 5s)'
   );
@@ -341,6 +386,19 @@ install(pool, GEN_SETTINGS, function(error) {
             updateTimes.delete(row.score_id);
           }
         });
+        handle.on('delete', function(row) {
+          runState.eventCount++;
+
+          var start = deleteTimes.get(row.score_id);
+          if(typeof start === 'undefined') {
+            console.log('Unexpected delete ' + row.score_id);
+          } else {
+            var now = Date.now();
+            var elapsed = (now - startTime) / 1000;
+            worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
+            deleteTimes.delete(row.score_id);
+          }
+        });
         handle.start().catch(function(error) {
           console.error("Error starting a handle.", error);
           process.exit(1);
@@ -385,7 +443,16 @@ install(pool, GEN_SETTINGS, function(error) {
                   }
                 }
 
-                // TODO: Process removed.
+                // Deleted.
+                var start = deleteTimes.get(scoreId);
+                if(typeof start === 'undefined') {
+                  console.log('Unexpected delete ' + scoreId);
+                } else {
+                  var now = Date.now();
+                  var elapsed = (now - startTime) / 1000;
+                  worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
+                  deleteTimes.delete(scoreId);
+                }
               }
             }
           }
@@ -423,44 +490,71 @@ install(pool, GEN_SETTINGS, function(error) {
         handle = reactiveQueries.query(reactiveQueryText.replace('$1',  '' + classId));
       }
 
-      handle.on('insert', (id, row, cols) => {
-        runState.eventCount++;
+      (function () {
+        var mapIdToScoreId = new Map();
+        handle.on('insert', (id, row, cols) => {
+          runState.eventCount++;
 
-        assert(cols[3] === 'score_id');
-        var score_id = row[3];
+          assert(cols[3] === 'score_id');
+          var scoreId = row[3];
 
-        // An update about initial scores.
-        if (score_id <= SCORES_COUNT) {
-          return;
-        }
+          mapIdToScoreId.set(id, scoreId);
 
-        var start = insertTimes.get(score_id);
-        if(typeof start === 'undefined') {
-          console.log('Unexpected insert ' + score_id);
-        } else {
-          var now = Date.now();
-          var elapsed = (now - startTime) / 1000;
-          worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
-          insertTimes.delete(score_id);
-        }
-      });
+          // An update about initial scores.
+          if (scoreId <= SCORES_COUNT) {
+            return;
+          }
 
-      handle.on('update', (id, row, cols) => {
-        runState.eventCount++;
+          var start = insertTimes.get(scoreId);
+          if(typeof start === 'undefined') {
+            console.log('Unexpected insert ' + scoreId);
+          } else {
+            var now = Date.now();
+            var elapsed = (now - startTime) / 1000;
+            worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
+            insertTimes.delete(scoreId);
+          }
+        });
 
-        assert(cols[3] === 'score_id');
-        var scoreId = row[3];
+        handle.on('update', (id, row, cols) => {
+          runState.eventCount++;
 
-        var start = updateTimes.get(scoreId);
-        if(typeof start === 'undefined') {
-          console.log('Unexpected update ' + scoreId);
-        } else {
-          var now = Date.now();
-          var elapsed = (now - startTime) / 1000;
-          worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
-          updateTimes.delete(scoreId);
-        }
-      });
+          assert(cols[3] === 'score_id');
+          var scoreId = row[3];
+
+          var start = updateTimes.get(scoreId);
+          if(typeof start === 'undefined') {
+            console.log('Unexpected update ' + scoreId);
+          } else {
+            var now = Date.now();
+            var elapsed = (now - startTime) / 1000;
+            worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
+            updateTimes.delete(scoreId);
+          }
+        });
+
+        handle.on('delete', (id) => {
+          runState.eventCount++;
+
+          var scoreId = mapIdToScoreId.get(id);
+          if (!scoreId) {
+            console.log('Unknown delete ' + id);
+            return;
+          }
+
+          mapIdToScoreId.delete(id);
+
+          var start = deleteTimes.get(scoreId);
+          if(typeof start === 'undefined') {
+            console.log('Unexpected delete ' + scoreId);
+          } else {
+            var now = Date.now();
+            var elapsed = (now - startTime) / 1000;
+            worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
+            deleteTimes.delete(scoreId);
+          }
+        });
+      })();
     }
     else if (PACKAGE === 'pg-query-observer') {
       reactiveQueries.notify(reactiveQueryText, [ classId ], function (change) {return true}, function (diff) {
@@ -499,12 +593,18 @@ install(pool, GEN_SETTINGS, function(error) {
         var insertedForReactiveQuery = insertTimes.has(params[0]);
         // Second query is update.
         var updated = i === 1;
+        // Third query is delete.
+        var deleted = i === 2;
         if (insertedForReactiveQuery) {
           unconfirmedInserts += 1;
         }
         else if (updated) {
           assert(updateTimes.has(params[0]));
           unconfirmedUpdates += 1;
+        }
+        else if (deleted) {
+          assert(deleteTimes.has(params[0]));
+          unconfirmedDeletes += 1;
         }
         client.query(description.query, params,
           function(error, result) {
@@ -514,11 +614,18 @@ install(pool, GEN_SETTINGS, function(error) {
               assert(updateTimes.has(params[0]));
               updateTimes.delete(params[0]);
             }
+            if (result.command === 'DELETE' && result.rowCount === 0) {
+              assert(deleteTimes.has(params[0]));
+              deleteTimes.delete(params[0]);
+            }
             if (insertedForReactiveQuery) {
               unconfirmedInserts -= 1;
             }
             else if (updated) {
               unconfirmedUpdates -= 1;
+            }
+            else if (deleted) {
+              unconfirmedDeletes -= 1;
             }
             if(error) throw error;
           }
