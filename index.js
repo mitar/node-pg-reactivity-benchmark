@@ -85,6 +85,8 @@ worker.unref();
 var startTime;
 
 function recordMemory() {
+  global.gc();
+
   var memUsage = process.memoryUsage();
   var elapsed = (Date.now() - startTime) / 1000;
 
