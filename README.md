@@ -22,11 +22,11 @@ $ npm install
 $ vim index.js
 
 # Start the application with the following command: (Output file is optional)
-$ node --experimental-worker --expose-gc index.js reactive-postgres-id out.json
+$ node --experimental-worker --expose-gc index.js reactive-postgres-columns out.json
 ```
 
 The first argument tell which package/configuration to use. Available options are:
-* `reactive-postgres-id`: in `id` mode
+* `reactive-postgres-columns`: in `columns` mode
 * `reactive-postgres-changed`: in `changed` mode
 * `reactive-postgres-full`: in `full` mode
 * `pg-live-select`
@@ -67,7 +67,7 @@ $ timeout --foreground --signal=INT --kill-after=5 300 node --experimental-worke
 
 Results are available through web viewer:
 
-* [`reactive-postgres-id`](https://mitar.github.io/node-pg-reactivity-benchmark/viewer.html?results/reactive-postgres-id.json)
+* [`reactive-postgres-columns`](https://mitar.github.io/node-pg-reactivity-benchmark/viewer.html?results/reactive-postgres-columns.json)
 * [`reactive-postgres-changed`](https://mitar.github.io/node-pg-reactivity-benchmark/viewer.html?results/reactive-postgres-changed.json)
 * [`reactive-postgres-full`](https://mitar.github.io/node-pg-reactivity-benchmark/viewer.html?results/reactive-postgres-full.json)
 * [`pg-live-select`](https://mitar.github.io/node-pg-reactivity-benchmark/viewer.html?results/pg-live-select.json)

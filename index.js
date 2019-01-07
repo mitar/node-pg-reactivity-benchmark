@@ -242,7 +242,7 @@ function interruptHandler() {
 
     pool.end();
 
-    if (PACKAGE === 'reactive-postgres-id' || PACKAGE === 'reactive-postgres-changed' || PACKAGE === 'reactive-postgres-full') {
+    if (PACKAGE === 'reactive-postgres-columns' || PACKAGE === 'reactive-postgres-changed' || PACKAGE === 'reactive-postgres-full') {
       reactiveQueries.stop().then(process.exit).catch(function(error) {
         console.error("Error stopping manager.", error);
         process.exit(1);
@@ -272,7 +272,7 @@ function interruptHandler() {
 process.on('SIGINT', interruptHandler);
 
 var reactiveQueries;
-if (PACKAGE === 'reactive-postgres-id' || PACKAGE === 'reactive-postgres-changed' || PACKAGE === 'reactive-postgres-full') {
+if (PACKAGE === 'reactive-postgres-columns' || PACKAGE === 'reactive-postgres-changed' || PACKAGE === 'reactive-postgres-full') {
   var Manager = require('reactive-postgres').Manager;
   reactiveQueries = new Manager({connectionConfig: {connectionString: CONN_STR}});
   reactiveQueries.start().catch(function(error) {
@@ -337,10 +337,10 @@ install(pool, GEN_SETTINGS, function(error) {
 
   var reactiveQueryText = fs.readFileSync('reactivequery.sql').toString();
   for(var classId = 1; classId <= REACTIVE_QUERIES_COUNT; classId++) {
-    if (PACKAGE === 'reactive-postgres-id' || PACKAGE === 'reactive-postgres-changed' || PACKAGE === 'reactive-postgres-full') {
+    if (PACKAGE === 'reactive-postgres-columns' || PACKAGE === 'reactive-postgres-changed' || PACKAGE === 'reactive-postgres-full') {
       var mode;
-      if (PACKAGE === 'reactive-postgres-id') {
-        mode = 'id';
+      if (PACKAGE === 'reactive-postgres-columns') {
+        mode = 'columns';
       }
       else if (PACKAGE === 'reactive-postgres-changed') {
         mode = 'changed';
