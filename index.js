@@ -610,6 +610,7 @@ install(pool, GEN_SETTINGS, function(error) {
         client.query(description.query, params,
           function(error, result) {
             done();
+            if(error) throw error;
             // Update query did not match anything, revert
             if (result.command === 'UPDATE' && result.rowCount === 0) {
               assert(updateTimes.has(params[0]));
@@ -628,7 +629,6 @@ install(pool, GEN_SETTINGS, function(error) {
             else if (deleted) {
               unconfirmedDeletes -= 1;
             }
-            if(error) throw error;
           }
         );
       });
