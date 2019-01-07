@@ -410,72 +410,73 @@ install(pool, GEN_SETTINGS, function(error) {
     }
     else if (PACKAGE === 'pg-live-select') {
       (function () {
-        var mapIndexToScoreId = new Map();
+        var mapIdToScore = new Map();
         reactiveQueries.select(reactiveQueryText, [ classId ]).on('update', function(diff, data) {
           runState.eventCount++;
 
-          var updated = new Set();
-
-          if (diff.removed) {
-            REMOVED: for (var i = 0; i < diff.removed.length; i++) {
-              var scoreId = mapIndexToScoreId.get(diff.removed[i]._index);
-              mapIndexToScoreId.delete(diff.removed[i]._index);
-              if(typeof scoreId === 'undefined') {
-                console.log('Unexpected removal ' + diff.removed[i]._index);
-              } else {
-                // Is update?
-                var added = diff.added || [];
-                for (var j = 0; j < added.length; j++) {
-                  if (added[j]._index === diff.removed[i]._index) {
-                    updated.add(scoreId);
-                    // Yes it is.
-                    var start = updateTimes.get(scoreId);
-                    if(typeof start === 'undefined') {
-                      console.log('Unexpected update ' + scoreId);
-                    } else {
-                      var now = Date.now();
-                      var elapsed = (now - startTime) / 1000;
-                      worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
-                      updateTimes.delete(scoreId);
-                    }
-
-                    continue REMOVED;
-                  }
-                }
-
-                // Deleted.
-                var start = deleteTimes.get(scoreId);
-                if(typeof start === 'undefined') {
-                  console.log('Unexpected delete ' + scoreId);
-                } else {
-                  var now = Date.now();
-                  var elapsed = (now - startTime) / 1000;
-                  worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
-                  deleteTimes.delete(scoreId);
-                }
+          var insertIds = [];
+          var updateIds = [];
+          var seenIds = new Set();
+          for (var i = 0; i < data.length; i++) {
+            var row = data[i];
+            seenIds.add(row.score_id);
+            if (mapIdToScore.has(row.score_id)) {
+              if (mapIdToScore.get(row.score_id) !== row.score) {
+                updateIds.push(row.score_id);
+                mapIdToScore.set(row.score_id, row.score);
               }
+            }
+            else {
+              insertIds.push(row.score_id);
+              mapIdToScore.set(row.score_id, row.score);
             }
           }
 
-          if (diff.added) {
-            for (var i = 0; i < diff.added.length; i++) {
-              mapIndexToScoreId.set(diff.added[i]._index, diff.added[i].score_id);
-              // An update about initial scores.
-              if (diff.added[i].score_id <= SCORES_COUNT) {
-                continue;
-              }
-              if (updated.has(diff.added[i].score_id)) {
-                continue;
-              }
-              var start = insertTimes.get(diff.added[i].score_id);
-              if(typeof start === 'undefined') {
-                console.log('Unexpected insert ' + diff.added[i].score_id);
-              } else {
-                var now = Date.now();
-                var elapsed = (now - startTime) / 1000;
-                worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
-                insertTimes.delete(diff.added[i].score_id);
-              }
+          var deleteIds = [];
+          for (var id of mapIdToScore.keys()) {
+            if (!seenIds.has(id)) {
+              deleteIds.push(id);
+              mapIdToScore.delete(id);
+            }
+          }
+
+          for (var i = 0; i < insertIds.length; i++) {
+            // An update about initial scores.
+            if (insertIds[i] <= SCORES_COUNT) {
+              continue;
+            }
+            var start = insertTimes.get(insertIds[i]);
+            if(typeof start === 'undefined') {
+              console.log('Unexpected insert ' + insertIds[i]);
+            } else {
+              var now = Date.now();
+              var elapsed = (now - startTime) / 1000;
+              worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
+              insertTimes.delete(insertIds[i]);
+            }
+          }
+
+          for (var i = 0; i < updateIds.length; i++) {
+            var start = updateTimes.get(updateIds[i]);
+            if(typeof start === 'undefined') {
+              console.log('Unexpected update ' + updateIds[i]);
+            } else {
+              var now = Date.now();
+              var elapsed = (now - startTime) / 1000;
+              worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
+              updateTimes.delete(updateIds[i]);
+            }
+          }
+
+          for (var i = 0; i < deleteIds.length; i++) {
+            var start = deleteTimes.get(deleteIds[i]);
+            if(typeof start === 'undefined') {
+              console.log('Unexpected delete ' + deleteIds[i]);
+            } else {
+              var now = Date.now();
+              var elapsed = (now - startTime) / 1000;
+              worker && worker.postMessage({type: 'responseTimes', value: [ elapsed, now - start ]});
+              deleteTimes.delete(deleteIds[i]);
             }
           }
         });
